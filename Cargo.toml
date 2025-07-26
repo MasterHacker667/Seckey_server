@@ -1,0 +1,15 @@
+[package]
+name = "adminServer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+dirs = "5"
+rand = "0.8"
+base64 = "0.21"
+sha2 = "0.10"
+chrono = "0.4"
+openssl = "0.10"
+zip = "0.6"
+walkdir = "2.4"
+rpassword = "7.0"
