@@ -12,6 +12,7 @@ use openssl::string;
 use rand::seq::SliceRandom;
 use rand::Rng;
 use std::io::Read;
+use hex;
 use sha2:: {Sha256, Digest};
 use std::process::{Command, Stdio};
 use std::process::exit;
@@ -622,6 +623,13 @@ fn create_admin_server() -> savedUser{
         //eprintln!("Error al generar la llave pública: {}", String::from_utf8_lossy(&output.stderr));
         writeLog(&format!("Error al generar la llave pública: {} \n", String::from_utf8_lossy(&output.stderr)));
     }
+    //Aqui procedemos a crear el archivo de las hijas
+    //fs::create_dir_all(parent).expect("No se pudo crear el directorio");
+    let rutaDaught = home_path("Server/myDaughter");
+    std::fs::create_dir_all(&rutaDaught).expect("Error al crear la carpeta myDaughter dentro de Server");
+    let rutaDaught = home_path("Server/myDaughter/mycooldaughter.yaml");
+    let mut file = File::create(&rutaDaught).expect("Error al crear el archivo vacío");
+    file.write_all(String::from("").as_bytes()).expect("Error al escribir Nada");
     // //Probando algoritmo y llaves
     // let mensaje = "Este es un mensaje de prueba";
     // fs::write(home_path("Server/Credentials/mensajePrueba.txt"), mensaje).expect("No se pudo guardar el mensaje");
@@ -1003,6 +1011,44 @@ fn rotaes(){
     }
     let mut file = File::create(&ruta_firma_iv).expect("Error al crear el archivo de firma del IV");
     file.write_all(aes_hash_base64.as_bytes()).expect("Error al escribir en el archivo de firma del IV");
+    //Codigo para descifrar y despues cifrar el archivo mycooldaughter.yaml
+    //Primer ubicamos el archivo 
+    //let rutadougt = home_path("Server/myDaughter/mycooldaughter.yaml");
+    //if !rutadougt.exists() {
+    //    writeLog("Error: No se encontró el archivo de apis\n");
+    //    exit(0);
+    //}
+    //let mut fileDaught = File::open(&rutadougt).expect("Error al abrir el archivo de usuarios");
+    //let mut buffer2 = String::new();
+    //fileDaught.read_to_string(&mut buffer2).expect("Error al leer el archivo de usuarios");
+    ////Aqui comprobamos que si existe, entonces procedemos a descifrarlo con la llave y IV actuales
+    //let mut cipher = openssl::symm::Crypter::new(
+    //    openssl::symm::Cipher::aes_256_cbc(),
+    //    openssl::symm::Mode::Decrypt,
+    //    &aes_key_bytes,
+    //    Some(&Iv),
+    //).expect("Error al crear el descifrador AES");
+    //let mut decrypted_role = vec![0; buffer2.len() + openssl::symm::Cipher::aes_256_cbc().block_size()];
+    //let mut count = cipher.update(&base64::decode(buffer2).expect("Error al decodificar el rol cifrado"), &mut decrypted_role).expect("Error al descifrar el rol");
+    //count += cipher.finalize(&mut decrypted_role[count..]).expect("Error al finalizar el descifrado");
+    //decrypted_role.truncate(count);
+    //let decrypted_role_string = String::from_utf8(decrypted_role).expect("Error al convertir el rol descifrado a String");
+    ////Aqui ya tenemos todo descifrado en decrypted_role_string asi que procedemos a cifrarlo 
+    //let mut cipher = openssl::symm::Crypter::new(
+    //    openssl::symm::Cipher::aes_256_cbc(),
+    //    openssl::symm::Mode::Encrypt,
+    //    &aes_key_new,
+    //    Some(&Iv),
+    //).expect("Error al crear el cifrador AES");
+    //let mut encrypted_role = vec![0; decrypted_role_string.len() + openssl::symm::Cipher::aes_256_cbc().block_size()];
+    //let mut count = cipher.update(decrypted_role_string.as_bytes(), &mut encrypted_role).expect("Error al cifrar el rol");
+    //count += cipher.finalize(&mut encrypted_role[count..]).expect("Error al finalizar el cifrado");
+    //encrypted_role.truncate(count);
+    ////Convertimos el rol cifrado a base64
+    //let encrypted_role_base64 = base64::encode(&encrypted_role);
+    ////Ahora escribirmos un nuevo archivo con este contenido
+    //let mut file = File::create(&rutadougt).expect("Error al crear el archivo de firma del IV");
+    //file.write_all(encrypted_role_base64.as_bytes()).expect("Error al escribir en el archivo de firma del IV");
     writeLog("Firma del IV actualizada correctamente. \n");
 
 }
@@ -1544,6 +1590,146 @@ fn command_reader(command: String, mut usuario: savedUser){
     }else if comm[0] == "exit" {
         writeLog(format!("{} ha salido del servidor y cerrado el programa\n", &usuario.username).as_str());
         exit(0);
+    }else if comm[0] == "api" && comm.len() == 3 && usuario.role == 'A'{
+        if comm[1] == "register" {
+            //Codigo para poder registrar una API con su respectiva llave publica y privada
+            //Esta se cifrará con la llave AES del servidor
+            let private_output = Command::new("openssl")
+                .args(&["genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:2048"])
+                .output()
+                .expect("Fallo al generar la clave privada");
+            let private_key = String::from_utf8(private_output.stdout)
+                .expect("Error al convertir la clave privada a UTF-8");
+
+            let mut child = Command::new("openssl")
+                .args(&["rsa", "-pubout"])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .spawn()
+                .expect("Fallo al ejecutar openssl para clave pública");
+                
+            // Escribimos la clave privada en la entrada estándar del proceso
+            {
+                let stdin = child.stdin.as_mut().expect("No se pudo abrir stdin");
+                stdin
+                    .write_all(private_key.as_bytes())
+                    .expect("No se pudo escribir en stdin");
+            }
+        
+            // Capturar la salida (clave pública)
+            let output = child.wait_with_output().expect("Fallo al capturar la salida");
+            let public_key = String::from_utf8(output.stdout)
+                .expect("Error al convertir la clave pública a UTF-8");
+            
+
+            //Ahora debemos unirlas y concatenarlas
+            let mut rng = rand::thread_rng();
+            let numero_aleatorio = rng.gen_range(1000..9999);
+            let mut hasheador4000 = Sha512::new();
+            hasheador4000.update(numero_aleatorio.to_string().as_bytes());
+            let saltTemp = hasheador4000.finish();
+            let mezcla = format!("{}{}{}", private_key, public_key, base64::encode(saltTemp));
+            let mut hasheador4001 = Sha512::new();
+            hasheador4001.update(mezcla.as_bytes());
+            let salta = hasheador4001.finish();
+            let saltF = base64::encode(salta);
+            let mut hasheador4002 = Sha512::new();
+            hasheador4002.update(format!("{}{}", comm[2], saltF).as_bytes());
+            let hashNombre = hex::encode(hasheador4002.finish()); 
+
+            // Mostrar claves
+            //println!("🔐 Clave privada RSA:\n{}", private_key);
+            println!("📢 Clave pública RSA:\n{}", public_key);
+            //println!("Salt de api: {}", saltF);
+            //Ahora es hora de crear el string definitivo:
+            let stringA = format!("{}\n{}\n\n", hashNombre, saltF);
+            //let stringAA = hex::encode(stringA);
+            //Ahora a colocar todo esto en sus respectivos archivos
+            let archivoPrivado = home_path(format!("Server/myDaughter/{}.key", hashNombre).as_str());
+            let archivoPublico = home_path(format!("Server/myDaughter/{}.pem", hashNombre).as_str());
+            let archivoSaltNombre = home_path("Server/myDaughter/mycooldaughter.yaml");
+            //println!("{:?}", archivoPrivado);
+            let mut archivo = File::create(&archivoPrivado).expect("Error al crear el archivo .key");
+            archivo.write_all(private_key.as_bytes()).expect("Error al escribir en el archivo .key");
+            let mut archivo = File::create(&archivoPublico).expect("Error al crear el archivo .pem");            
+            archivo.write_all(public_key.as_bytes()).expect("Error al escribir en el archivo .pem");
+            //Leer el archivo antes de escribir sobre el:
+            let mut archivo = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&archivoSaltNombre)
+                .expect("Error al abrir archivo para añadir contenido");
+            archivo.write_all(stringA.as_bytes()).expect("Error al agregar contenido al archivo .yaml -> ");
+            let archivoNombres = home_path("Server/myDaughter/thenamesmotherfucker.kissmyass");
+            let mut archivoNames = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&archivoNombres)
+            .expect("Error al abrir el archivo de nombres");
+            archivoNames.write_all(format!("{}\n", comm[2]).as_bytes()).expect("Error al agregar informacion al archivo de nombres");
+            writeLog(format!("Llaves para la nueva API '{}' creadas\n", comm[2]).as_str());
+
+        }else if comm[1] == "delete" {
+            //Primero necesitamos extraer la lista de salts + nombres hasheados que hay en el .yaml
+            let rutacosas = home_path("Server/myDaughter/mycooldaughter.yaml");
+            if !rutacosas.exists() {
+                writeLog("El servidor a sido comprometodo\nSe requiere reseteo URGENTEMENTE!!!\nLlamen a Dios!!!\n");
+                exit(0);
+            }
+            let mut buffer = String::new();
+            let mut archivo = File::open(&rutacosas).expect("Error al abrir el archivo de yaml");
+            archivo.read_to_string(&mut buffer).expect("Error al extraer la data del archivo yaml");
+            let mut pares :Vec<&str>= buffer.split("\n\n").collect();
+            if pares[pares.len() - 1] == "" {
+                pares.pop();
+            }
+            //pares.pop();
+            let mut ih = 0;
+            let mut banda = false;
+            for par in pares.clone() {
+                let mut parordenado: Vec<&str>= par.split("\n").collect();
+                let semilla1 = format!("{}{}", comm[2], parordenado[1]);
+                let mut hasheador4002 = Sha512::new();
+                hasheador4002.update(semilla1.as_bytes());
+                let hashearFinal = hasheador4002.finish();
+                let hasherFinalHex = hex::encode(hashearFinal);
+                if hasherFinalHex == parordenado[0] {
+                    //Se encontró con el nombre hasheado, ahora debemos removerlo del par ordenado
+
+                    //Borrando el archivo de las llaves
+                    let llavePruv = home_path(format!("Server/myDaughter/{}.key", hasherFinalHex).as_str());
+                    if llavePruv.exists() {
+                        fs::remove_file(llavePruv).expect("Error al tratar de borrar el .key");
+                    }
+                    let llavePub = home_path(format!("Server/c/{}.pem", hasherFinalHex).as_str());
+                    if llavePub.exists() {
+                        fs::remove_file(llavePub).expect("Error al tratar de eliminar el archivo .pem");
+                    }
+                    pares.remove(ih);
+                    banda = true;
+                    //println!("{:?}", pares);
+                    break;
+                }ih+=1;
+            }
+            if banda {
+                let mut stringA = String::new();
+                for i in pares{
+                    stringA = format!("{}{}\n\n", stringA, i);
+                    //println!("{}", i);
+                }
+                let archivoyaml = home_path("Server/myDaughter/mycooldaughter.yaml");
+                let mut archivo = File::create(archivoyaml).expect("Error al recrear el archivo");
+                archivo.write_all(stringA.as_bytes()).expect("Error al cambiar el contenido del archivo .yaml");
+                //println!("{}", stringA);
+                writeLog("Api eliminada de la lista\n");
+            }else {
+                writeLog("No existe dicha api, lo siento\n");
+            }
+            
+            //comm[2] nos dice el nombre, debemos verificar si ese nombre existe primero
+        }
+        
+
     }else {
         writeLog(format!("Error!!!\n Comando insexitente o son privilegios necesarios\nTuRol es {}\n", &usuario.role).as_str());
     }
