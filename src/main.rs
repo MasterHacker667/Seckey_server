@@ -349,7 +349,9 @@ fn create_user(bandPass: bool) -> savedUser{
 fn writeLog(mensaje: &str) {
     //Sacamos la fecha de hoy
     let fecha = chrono::Local::now().format("%Y-%m-%d_%H").to_string();
-    let ruta_log = format!("src/logs/{}.log", fecha);
+    //home_path("Sofia/logs");
+    //let ruta_log = format!("src/logs/{}.log", fecha);
+    let ruta_log = home_path(format!("Sofia/logs/{}.log", fecha).as_str());
     //Vemos si este archivo ya existe si tiene el mismo nombre (osea la fecha)
     let now = chrono::Local::now();
     let hora = now.format("[%H: %M: %S]").to_string();
@@ -425,6 +427,14 @@ fn home_path(ruta_relativa: &str) -> PathBuf {
 }
 
 fn create_admin_server() -> savedUser{
+    //Creando ruta de logs
+    let ruta_logs = home_path("Sofia/logs");
+    if !ruta_logs.exists() {
+        std::fs::create_dir_all(&ruta_logs).expect("Error al crear la carpeta de imágenes");
+        writeLog("Carpeta de imágenes creada correctamente. \n");
+    }else{
+        writeLog("La carpeta de imágenes ya existe. \n");
+    }
     //Ver si existe la carpeta Server en home
     writeLog("Creando el servidor de administración... \n");
     let ruta_server = home_path("Server");
@@ -447,6 +457,8 @@ fn create_admin_server() -> savedUser{
     }else{
         writeLog("La carpeta de imágenes ya existe. \n");
     }
+    
+
     //Ingresar una frase de seguridad
     let frase = createPhrase();
     //Imprimir la frase de seguridad
@@ -457,7 +469,8 @@ fn create_admin_server() -> savedUser{
     if ruta_imagenes.read_dir().expect("Error al leer el directorio de imágenes").count() == 0 {
         //println!("La carpeta de imágenes está vacía. Por favor, añade una imagen antes de continuar.");
         //Usar la imagen del proyecto y ponerla en la carpeta de imagenes
-        let ruta_proyecto_imagen = Path::new("src/assets/imagenDefault.jpg");
+        //let ruta_proyecto_imagen = Path::new("src/assets/imagenDefault.jpg");
+        let ruta_proyecto_imagen = home_path("imagenDefault.jpg");
         let ruta_destino = home_path("Sofia/Images/imagenDefault.jpg");
         std::fs::copy(ruta_proyecto_imagen, &ruta_destino).expect("Error al copiar la imagen por defecto");
         writeLog("Imagen por defecto copiada a la carpeta de imágenes. \n");
@@ -1508,7 +1521,7 @@ fn command_reader(command: String, mut usuario: savedUser){
         
     }else if comm[0] == "logs" && comm[1] == "read" {
         //Leer todos los logs en la carpeta logs de aqui
-        let pathlogs = Path::new("src/logs");
+        let pathlogs = home_path("Sofia/logs");
         let mut archivos_logs: Vec<String> = Vec::new();
         let mut buffer: String = String::new();
         //Aqui debemos leer estos archivos con un maximo de 5 archivos
@@ -1545,7 +1558,7 @@ fn command_reader(command: String, mut usuario: savedUser){
         for i in archivos_logs {
             let titulo = i.as_str();
             writeLog(format!("Archivo a leer: {}", titulo).as_str());
-            let direccion = format!("src/logs/{}", i);
+            let direccion = home_path(format!("Sofia/logs/{}", i).as_str());
             let mut contenido = String::new();
             let mut file = File::open(direccion).expect("Error al obtener el contenido");
             file.read_to_string(&mut contenido).expect("Error al obtener contenido");
